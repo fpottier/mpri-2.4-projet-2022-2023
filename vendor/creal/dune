@@ -1,0 +1,12 @@
+(library
+  (name CReal)
+  (public_name CReal)
+  (modules CReal)
+  (libraries zarith)
+)
+
+(test
+  (name test)
+  (modules Test)
+  (libraries CReal)
+)

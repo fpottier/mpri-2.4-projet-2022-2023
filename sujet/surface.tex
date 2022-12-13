@@ -1,0 +1,42 @@
+\[\begin{array}{rcll}
+\uop & ::= &
+  \cos \mid \sin \mid \exp \mid \ldots
+  & \text{unary operations}
+\\
+\bop & ::= &
+  \mathord{+} \mid \mathord{-} \mid \mathord{\times} \mid \mathord{/} \mid \ldots
+  & \text{binary operations}
+\\
+\expr & ::= &
+  \var\x
+\mid
+  \local\x\expr\expr
+  & \text{variable; sequencing}
+\\&&
+\mid
+  \lit{c}
+\mid
+  \unop\uop\ux
+\mid
+  \binop\ux\bop\ux
+  & \text{arithmetic operations of arity 0, 1, 2}
+\\&&
+\mid
+  \utupleintro\xs
+\mid
+  \utupleelim\xs\expr\expr
+  & \text{tuple construction and deconstruction}
+\\&&
+\mid
+  f(\xs)
+  & \text{function call}
+\\
+\tau & ::= &
+  \real
+  & \text{real numbers}
+  \\&&
+\mid
+  (\vec\tau)
+  & \text{tuples}
+\\
+\end{array}\]

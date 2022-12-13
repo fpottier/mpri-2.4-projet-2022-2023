@@ -1,0 +1,8 @@
+opam-version: "2.0"
+version: "trunk"
+maintainer: "gabriel.scherer@gmail.com"
+authors: [
+  "Simon Cruanes"
+]
+
+synopsis: "a support library for Ansi escape codes, extracted from the OCaml compiler distribution"

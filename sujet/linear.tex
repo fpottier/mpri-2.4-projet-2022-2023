@@ -1,0 +1,53 @@
+\[\begin{array}{rcll}
+\uop & ::= &
+  \cos \mid \sin \mid \exp \mid \ldots
+  & \text{unrestricted unary operations}
+\\
+\bop & ::= &
+  \mathord{+} \mid \mathord{-} \mid \mathord{\times} \mid \mathord{/} \mid \ldots
+  & \text{unrestricted binary operations}
+\\
+\lx & & & \text{linear variables} \\
+\ux & & & \text{unrestricted variables} \\
+\expr & ::= &
+  \ret\uxs\lxs
+\mid
+  \seq\uxs\lxs\expr\expr
+  & \text{return; sequencing}
+\\&&
+\mid
+  \lit{c}
+\mid
+  \unop\uop\ux
+\mid
+  \binop\ux\bop\ux
+  & \text{unrestricted fragment}
+\\&&
+\mid
+  \lzero
+\mid
+  \ladd\lx\lx
+\mid
+  \lmul\ux\lx
+\mid
+  \drop\lx
+\mid
+  \dup\lx
+  & \text{linear fragment}
+\\&&
+\mid
+  \utupleintro\uxs
+\mid
+  \utupleelim\uxs\ux\expr
+  & \text{unrestricted tuples}
+\\&&
+\mid
+  \ltupleintro\lxs
+\mid
+  \ltupleelim\lxs\lx\expr
+  & \text{linear tuples}
+\\&&
+\mid
+  \funcall{f}\uxs\lxs
+  & \text{function call}
+\end{array}\]

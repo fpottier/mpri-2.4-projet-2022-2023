@@ -1,0 +1,71 @@
+\def\etal.{\emph{et al.}\xspace}
+\newcommand{\file}[1]{\texttt{#1}}
+\newcommand{\oc}[1]{\texttt{#1}}
+\newcommand{\cmd}[1]{``\texttt{#1}''}
+\newcommand{\dash}{-{}-}
+\newcommand{\email}[1]{\url{mailto:#1}}
+\newcommand{\entree}[1]{\item[\texttt{#1}]}
+\newcommand{\both}{ml[i]}
+\newcommand{\lc}{$\lambda$-calculus\xspace}
+\newcommand{\repoURL}{https://github.com/fpottier/mpri-2.4-projet-2022-2023}
+\newcommand{\repofile}[1]{%
+  \href{\repoURL/blob/master/#1}
+  {\texttt{#1}}%
+}
+\newcommand{\srcfile}[1]{%
+  \href{\repoURL/blob/master/src/#1}
+  {\texttt{#1}}%
+}
+\newcommand{\ml}[1]{\srcfile{#1.ml}}
+\newcommand{\mli}[1]{\srcfile{#1.mli}}
+\newcommand{\mll}[1]{\srcfile{#1.mll}}
+\newcommand{\mly}[1]{\srcfile{#1.mly}}
+
+% Abbreviations.
+\newcommand{\fmad}{forward-mode AD\xspace}
+\newcommand{\unzipping}{unzipping\xspace}
+\newcommand{\transposition}{transposition\xspace}
+
+% Macros from the talk.
+% Macros.
+\newcommand{\kw}[1]{\mathsf{#1}}
+\newcommand{\ux}{u}
+\newcommand{\lx}{l}
+\newcommand{\x}{x}
+\newcommand{\xs}{\vec\x}
+\newcommand{\uxs}{\vec\ux}
+\newcommand{\lxs}{\vec\lx}
+\newcommand{\expr}{e}
+\newcommand{\var}[1]{#1}
+\newcommand{\ret}[2]{(#1; #2)}
+\newcommand{\local}[3]{\kw{let}\,#1=#2\,\kw{in}\,#3}
+\newcommand{\seq}[4]{\kw{let}\,(#1;#2)=#3\,\kw{in}\,#4}
+\newcommand{\lit}[1]{#1}
+\newcommand{\uop}{\mathit{uop}}
+\newcommand{\unop}[2]{#1(#2)}
+\newcommand{\bop}{\mathit{bop}}
+\newcommand{\binop}[3]{#1\mathop{#2}#3}
+\newcommand{\lzero}{0}
+\newcommand{\ladd}[2]{#1\mathbin{+.}#2}
+\newcommand{\lmul}[2]{#1\mathbin{\times.}#2}
+\newcommand{\drop}[1]{\kw{drop}\,#1}
+\newcommand{\dup}[1]{\kw{dup}\,#1}
+\newcommand{\utupleintro}[1]{(#1)}
+\newcommand{\utupleelim}[3]{\kw{let}\,(#1)=#2\,\kw{in}\,#3}
+\newcommand{\ltupleintro}[1]{(#1)}
+\newcommand{\ltupleelim}[3]{\kw{let}\,(#1)=#2\,\kw{in}\,#3}
+\newcommand{\funcall}[3]{#1(#2;#3)}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\ar}{\rightarrow}
+\newcommand{\dx}{\mathit{dx}}
+\newcommand{\dy}{\mathit{dy}}
+\newcommand{\df}{\mathit{df}}
+\newcommand{\tcdf}{\mathit{tcdf}}
+\newcommand{\Jf}{\mathit{Jf}}
+\newcommand{\dd}[2]{\frac{\partial#1}{\partial#2}}
+\newcommand{\transpose}[1]{#1^\top}
+\newcommand{\real}{\text{\texttt{real}}}
+
+\newcommand{\verticalvector}[2]{%
+\left[\begin{array}{c}#1\\#2\end{array}\right]%
+}

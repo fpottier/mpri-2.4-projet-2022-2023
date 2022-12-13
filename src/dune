@@ -1,0 +1,14 @@
+(ocamllex
+  (modules SurfaceLexer)
+)
+
+(menhir
+  (modules SurfaceParser)
+  (flags -lg 1 -la 1 --explain --strict)
+)
+
+(executable
+  (name Main)
+  (flags (:standard -w A-4-44-45-60-70 -g))
+  (libraries menhirLib pprint CReal ansi)
+)

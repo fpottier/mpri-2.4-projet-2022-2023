@@ -1,0 +1,561 @@
+\documentclass{article}
+\usepackage{amssymb}
+\usepackage{amstext}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\setlist{nosep}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper,bottom=40mm]{geometry}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{macros}
+\usepackage{times}
+\usepackage[scaled=0.78]{beramono}
+\usepackage{xspace}
+\usepackage[final]{listings}
+\input{listings-ocaml}
+\lstset{
+  language=ocaml,
+  aboveskip=.3\baselineskip,
+  belowskip=.3\baselineskip,
+}
+\usepackage{mdframed}
+\usepackage{natbib}
+\bibliographystyle{plainnat}
+\citestyle{authoryear}
+
+\title{MPRI 2.4 \\
+       Programmation fonctionnelle et systèmes de types \\
+       Programming project}
+\author{François Pottier}
+\date{2022--2023}
+
+\parskip=1mm
+
+\begin{document}
+\maketitle
+
+% ------------------------------------------------------------------------------
+
+\section{Overview}
+
+The purpose of this project is to implement (selected parts of) a small
+compiler which performs \textbf{forward-mode and reverse-mode automatic
+  differentiation} for a very small language of arithmetic expressions.
+
+A good introduction to automatic differentiation (AD) can be found in the
+textbook by \citet{griewank-walther}. Chapters 1--3 are sufficient. Please
+email \href{mailto:francois.pottier@inria.fr}{François Pottier} for an
+electronic copy (not for redistribution).
+
+The project is based on the paper ``You Only Linearize Once: Tangents
+Transpose to Gradients''~\citep{radul-al-23}, which will be presented
+at the conference POPL 2023 in January 2023.
+%
+The paper defines a calculus named \textbf{Linear} and presents three
+transformations of this calculus into itself:
+\begin{itemize}
+\item forward-mode AD (Section~5);
+\item unzipping (Section~6);
+\item transposition (Section~7).
+\end{itemize}
+The composition of the three transformations, in the order shown above,
+yields reverse-mode AD.
+
+The project is organized in \textbf{two main tasks}. Task~1 is to implement
+forward-mode AD. Task~2 is to implement unzipping and transposition, thereby
+yielding an implementation of reverse-mode AD. A~test infrastructure is
+provided for each of these two implementations of AD.
+
+% ------------------------------------------------------------------------------
+
+\section{The Surface calculus}
+
+Surface is a simple calculus of arithmetic expressions. It is equipped with
+functions and tuples. The syntax of expressions is as follows:
+%
+\input{surface}
+%
+A program is a sequence of function definitions. A function can take multiple
+arguments and returns a single result. Functions are not recursive. The
+language is statically typed. The types $\tau$ include the type $\real$ as well as
+tuple types $(\vec\tau)$. See \file{Surface.ml} for more details.
+
+A lexer and parser for Surface are provided
+(\mll{SurfaceLexer}, \mly{SurfaceParser}).
+
+A type-checker, an interpreter, and a pretty-printer for Surface are provided
+(\mli{SurfaceTypeChecker}, \mli{SurfaceInterpreter}, \mli{SurfacePrinter}).
+
+A~translation from Surface to Linear is provided (\mli{Surface2Linear}). This
+transformation is trivial. A Surface variable $\x$ is transformed to an
+unrestricted Linear variable $\ux$.
+
+A random generator of well-typed Surface programs is provided
+(\ml{SurfaceGenerator}). It is used in the test infrastructure.
+
+% ------------------------------------------------------------------------------
+
+\section{The Linear calculus}
+
+Linear is also a calculus of arithmetic expressions.
+%
+In this calculus, there is a distinction between two classes of variables,
+namely \emph{unrestricted variables~$\ux$} and \emph{linear variables~$\lx$}.
+
+Furthermore, in Linear, an expression returns not just one result, but
+\emph{a list of results}, which are further separated into \emph{a list of
+  unrestricted results} and \emph{a list of linear results}. Each result is a
+value, whose type can be $\real$ or a tuple type. We stress that a list of
+results is not the same thing as a tuple: for instance, a function that
+returns one unrestricted result of type $(\real, \real)$ is not the same thing
+as a function that returns two unrestricted results of type $\real$ and
+$\real$.
+
+It helps to think of an expression visually as a \emph{box} with input and
+output wires. Each wire is either unrestricted or linear. An input wire is
+named: it corresponds to an unrestricted variable $\ux$ or a linear variable
+$\lx$ that occurs free in the expression. An output wire is not named, but is
+implicitly numbered. For instance, if an expression has two unrestricted
+results and one linear result, then it has two unrestricted output wires
+(implicitly numbered~0 and~1) and one linear output wire (implicitly
+numbered~0).
+
+These aspects are made precise by the type discipline presented in Figure~4 of
+the paper. The source code of the Linear type-checker, in the file
+\ml{LinearTypeChecker}, can also serve as a reference.
+
+The syntax of Linear expressions is as follows. As a warm-up exercise, we
+suggest drawing the boxes that correspond to each form of expression, as
+well as their input and output wires.
+%
+\input{linear}
+
+As is evident in this syntax, linear variables take part in linear
+computations only: the linear addition operator $\ladd\lx\lx$ takes two linear
+variables as arguments, and the scaling operator $\lmul\ux\lx$ takes a linear
+variables as its second argument. Addition and scaling are the only two
+arithmetic operations that take linear variables as arguments. This ensures
+that \emph{every expression denotes a linear function of its linear inputs to
+  its linear outputs}.
+
+Furthermore, in Linear, every linear variable must be used exactly once. This
+is the reason why the expressions $\drop\lx$ and $\dup\lx$ are provided. The
+expression $\drop\lx$ has one input wire, namely $\lx$, and zero output wire.
+The expression $\dup\lx$ has one input wire, namely $\lx$, and two output
+wires. It is usually known as a ``fan-out'' box, because a single wire is
+split into two wires.
+
+Thus, linear variables are ``linear'' both in the sense of mathematics
+(linear variables serve as inputs of linear functions)
+and in the sense of computer science
+(linear variables are used exactly once).
+
+Sometimes, ensuring that every linear variable is used exactly once can be
+painful. We allow this discipline to be temporarily violated and repair it
+afterwards (\mli{DupDropInsertion}). For example, forward-mode~AD is allowed
+to produce code where this discipline is violated.
+
+A type-checker, an interpreter, and a pretty-printer for Linear are provided
+(\mli{LinearTypeChecker}, \mli{LinearInterpreter}, \mli{LinearPrinter}).
+
+Two transformations that hoist and simplify $\kw{let}$ bindings are
+provided (\mli{Normalize}, \mli{Simplify}). A transformation that renames
+every variable to a fresh name is provided (\mli{Freshen}).
+
+A transformation that transforms all linear variables into unrestricted
+variables is provided (\mli{Forget}). It serves as a first step in the
+translation of Linear back to Surface (\mli{Linear2Surface}).
+
+Many useful auxiliary functions are provided in the file \ml{LinearHelp}.
+It is worth spending some time to understand what these functions do; you
+may need to use some or all of them.
+
+% ------------------------------------------------------------------------------
+
+\section{Forward-mode AD}
+
+Task~1, the implementation of forward-mode AD, takes place in the file
+\ml{ForwardMode}. The intended effect of this program transformation is
+informally described in the file \mli{ForwardMode}. See also
+\S\ref{sec:example:fmad} for an example.
+
+This transformation is expected to produce code that computes a
+Jacobian-Vector Product (JVP). The function \texttt{test\_forward\_mode}
+in the file \ml{Test}, and the comment that precedes this function,
+explain what property is expected.
+
+An example is given in
+\S\ref{sec:example:fmad}.
+
+One way to test is via the following command:
+\begin{verbatim}
+  dune exec src/Main.exe -- --forward-mode --test-forward
+\end{verbatim}
+Or, you can edit \repofile{main.sh} to test just the forward mode
+and then type \cmd{make test}.
+More details about testing are given in \S\ref{sec:testing}.
+
+% ------------------------------------------------------------------------------
+
+\section{Reverse-mode AD}
+
+Task~2, the implementation of reverse-mode AD, is split in two
+transformations, unzipping and transposition, which take place
+in the files \ml{Unzip} and \ml{Transpose}.
+
+The composition of forward-mode AD, unzipping, and transposition is expected
+to produce code that computes a Vector-Jacobian Product (VJP). The function
+\texttt{test\_reverse\_mode} in the file \ml{Test}, and the comment that
+precedes this function, explain what property is expected.
+
+An example is given in
+\S\ref{sec:example:rmad}.
+
+One way to test is via the following command:
+\begin{verbatim}
+  dune exec src/Main.exe -- --reverse-mode --test-reverse
+\end{verbatim}
+Or, you can edit \repofile{main.sh} to test the reverse mode
+and then type \cmd{make test}.
+These commands test the \emph{combination} of forward-mode AD,
+unzipping, and transposition, so they cannot be used until
+all three passes have been implemented.
+More details about testing are given in \S\ref{sec:testing}.
+
+% [Gabriel] Je n'ai pas trouvé comment tester cette fonction
+% (sans avoir fait la transposition encore), à part les vérifications
+% de bonne formation qui sont faites, et lire le code généré sur des
+% exemples.
+
+% [Gabriel] La difficulté principale pour moi a été de trouver quel
+% ensemble de variables trimballer à chaque endroit. L'article fait
+% un produit explicite de tous les éléments du contexte, c'est moche
+% et j'ai décidé de faire sans. (Visiblement François aussi, mais ce
+% n'est pas explicité dans le sujet je crois ? juste dans les
+% exemples.)
+
+% [Gabriel] J'ai aussi oublié au départ d'inclure les paramètres de
+% [uf] dans les paramètres de [lf] (en fait il suffit de mettre
+% seulement ceux utilisés dans le corps de [lf], mais je n'en avais
+% mis aucun). L'article n'était vraiment pas clair sur ce sujet, il
+% fallait lire les petits caractères sur la définition de
+% w (les parties du contexte *et de v*).
+%
+% Dans ma version j'ai décidé de ne pas inclure le sous-ensemble utile
+% des paramètres d'entrée de [f] dans la sortie de [uf], comme fait
+% François et l'article, mais de les passer directement de [ldf]
+% à [lf]. Ça fait un poil moins de variables renvoyées par [uf], je
+% trouve ça plus simple et plus joli. Ça déplace le placement de
+% certains "dup"... j'espère que reverse-mode va marcher quand même ?
+
+% [Gabriel]: dans Transpose, le point le plus délicat, de loin, est de
+% comprendre comment permuter les variables dans les cas Ret, Let, LTupleIntro
+% et FunCall.
+%
+% Je n'ai pas trouvé une façon de décrire ces permutations qui soit
+% intuitive pour moi et me permettre savoir facilement où les placer
+% et dans quel sens permuter.
+%
+% Je vois que la solution utilise [lwiden], j'ai défini mon propre
+% opérateur de permutations.
+%
+% Je pense que le plus facile serait d'introduire des règles
+% d'inférence plus algorithmiques qui représentent explicitement les
+% permutations; on vérifie les règles et après ça se code tout
+% seul. Je trouve la figure 11 de l'article, que j'ai utilisée comme
+% référence, très légère sur ce point, elle cache complètement la
+% difficulté sous le tapis.
+
+% ------------------------------------------------------------------------------
+
+\section{Example}
+\label{sec:example}
+
+\subsection{Forward-mode AD}
+\label{sec:example:fmad}
+
+As a simple example, let us consider the function $f : \mathbb{R}^2 \rightarrow
+\mathbb{R}$ defined by $f(x_0, x_1) = x_0\times\cos(x_1)+x_0$.
+%
+This function is defined in Surface as follows:
+
+\lstset{rangeprefix=(*\ ,rangesuffix=\ *),includerangemarker=false}
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=ORIG_SURFACE]{simple.txt}
+\end{mdframed}
+
+This program is translated down to Linear as follows:
+
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=ORIG_LINEAR]{simple.txt}
+\end{mdframed}
+
+Then, forward-mode AD (followed with insertion of $\kw{dup}$ and
+$\kw{drop}$, normalization, simplification, freshening) produces the
+following Linear program:
+
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=FMAD_LINEAR]{simple.txt}
+\end{mdframed}
+
+The function \texttt{f} has been preserved, and a new function \texttt{df},
+which computes both \texttt{f} and the differential of \texttt{f}, has been
+constructed.
+
+By translating this Linear program back to Surface,
+and by performing a compression step
+(which transforms \oc|let x = e1 in e2| to \oc|e2[e1/x]|
+ when there is at most one occurrence of \oc|x| in \oc|e2|),
+one obtains the following code:
+
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=FMAD_RESURFACED]{simple.txt}
+\end{mdframed}
+
+It is not too difficult to check that the results computed by \texttt{df} are
+correct: they are the original result of \texttt{f} and the differential of
+\texttt{f}. This correctness property can be expressed in the following manner:
+%
+if \[[y, \dy] = \df(x_0, x_1, \dx_0, \dx_1)\]
+then \[y=f(x_0, x_1)\]
+and \[\dy=\Jf(x_0,x_1) \cdot \verticalvector{\dx_0}{\dx_1}\]
+where
+$\Jf(x_0, x_1)$ is the Jacobian matrix of $f$ at $(x_0, x_1)$.
+Here, it is the matrix $[ \dd{f}{x_0}(x_0, x_1) \quad \dd{f}{x_1}(x_0, x_1) ]$.
+
+It is worth noting that the intermediate result \texttt{hu6} is shared. Work
+is never duplicated, so, up to a~constant factor, the cost of \texttt{df} is
+the cost of \texttt{f}.
+
+By design of the language Linear, a linear result can depend on an
+unrestricted variable, but an unrestricted result cannot depend on a linear
+variable. Thus, there is a one-way dependency between the unrestricted
+fragment and the linear fragment of a computation. This is exploited during
+unzipping.
+
+\subsection{Reverse-mode AD}
+\label{sec:example:rmad}
+
+Now, let us start again from the Linear program that is produced by
+forward-mode AD:
+
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=FMAD_LINEAR]{simple.txt}
+\end{mdframed}
+
+Unzipping transforms the function \texttt{df} into two functions, \texttt{udf}
+and \texttt{ldf}, which represent the unrestricted fragment and the linear
+fragment of the computation performed by \texttt{df}. Furthermore, the little
+function \texttt{cdf} is a composition of \texttt{udf} and \texttt{ldf}. The
+(normalized, simplified) Linear program produced by unzipping is as follows:
+
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=UNZIPPED_LINEAR]{simple.txt}
+\end{mdframed}
+
+The functions \texttt{ldf} and \texttt{cdf} have zero unrestricted outputs.
+Thus, when their unrestricted inputs are fixed, these functions denote linear
+maps of their linear inputs to their linear outputs.
+
+These functions can be transposed. When an expression is viewed as a matrix,
+this transformation corresponds to matrix transposition. When an expression is
+viewed as a data flow network (composed of boxes and wires), this corresponds
+to reversing the direction of the wires, transforming zero into
+$\kw{drop}$ (and vice-versa), and transforming addition into
+$\kw{dup}$ (and vice-versa).
+
+The result is the following Linear program:
+
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=TRANSPOSED_LINEAR]{simple.txt}
+\end{mdframed}
+
+Once translated back to Surface (and compressed), the program is:
+
+\begin{mdframed}[backgroundcolor=gray!10,linewidth=0pt]
+\lstinputlisting[linerange=RMAD_RESURFACED]{simple.txt}
+\end{mdframed}
+
+The correctness of the function \texttt{tcdf} can be expressed as follows.
+If
+\([\dx_0, \dx_1] = \tcdf(x_0, x_1, \dy)\)
+then
+\[
+  [\dx_0, \dx_1] =
+  [ \dy ] \cdot \Jf(x_0, x_1)
+\]
+or, equivalently,
+\[
+  \verticalvector{\dx_0}{\dx_1} = \Jf(x_0, x_1)^\top \cdot [ \dy ].
+\]
+
+% ------------------------------------------------------------------------------
+
+\section{Practical details}
+
+\subsection{Building and using the compiler}
+\label{sec:testing}
+
+The directory \file{src/} contains the source files. The file \ml{Main}
+contains the compiler's main program. Depending on the command line arguments,
+this compiler can be applied either to a specific Surface program or to a
+large number of randomly-generated Surface programs. Furthermore, it is
+optionally capable of running tests to check that the transformed code seems
+to be correct.
+
+Typing \cmd{make} in the root directory produces the executable program
+\texttt{\_build/default/src/Main.exe}. By default, this program expects to
+receive on its command line the name of a file that contains a Surface
+program.
+
+The tiny script \repofile{main.sh} builds and runs this executable program. For
+instance, typing \cmd{./main.sh test/inputs/simple.s} runs the compiler on the
+Surface program stored in \repofile{test/inputs/simple.s}. You can edit this
+script in order to add or remove some command line arguments. For instance, in
+the beginning, you will want to remove \texttt{\dash test-forward} and
+\texttt{\dash test-reverse}. You can restore them once you are ready to test
+your implementations of forward-mode AD and reverse-mode AD.
+
+Typing \cmd{./main.sh \dash help} shows the command line options accepted by the
+compiler. In particular,
+\begin{itemize}
+\item \texttt{\dash forward-mode} causes the compiler to stop after performing
+      forward-mode AD. You should use this option in the beginning and until
+      your implementation of reverse-mode AD is ready.
+\item \texttt{\dash reverse-mode} causes the compiler to perform
+      forward-mode AD, unzipping, and transposition,
+      thereby obtaining reverse-mode AD. It is enabled by default.
+\item \texttt{\dash show-surface} causes the compiler to print the Surface
+      program (on the standard output channel) at various stages of the
+      transformation. This can be useful while debugging.
+\item \texttt{\dash show-linear} causes the compiler to print the Linear
+      program (on the standard output channel) at various stages of the
+      transformation. This can be useful while debugging.
+\item \texttt{\dash test-forward} causes the compiler to test the Surface
+      program that is obtained as a result of forward-mode AD. The program is
+      tested by checking that the equations given at the end
+      of~\S\ref{sec:example:fmad} appear to hold. These equations
+      are evaluated at randomly-chosen input values.
+      All computations are performed using the
+      arbitrary-precision real numbers provided by the library
+      \href{https://github.com/backtracking/creal}{creal}.
+      Because division is not defined (therefore not differentiable) at~0,
+      if a test involves a division by a number that seems close to~0,
+      then this test is aborted and ignored.
+\item \texttt{\dash test-reverse} causes the compiler to test the Surface
+      program that is obtained as a result of reverse-mode AD. The program is
+      tested by checking that the equations given at the end
+      of~\S\ref{sec:example:rmad} appear to hold.
+\end{itemize}
+
+When invoked without a file name, the compiler automatically applies itself to
+a number of randomly-generated Surface programs of increasing sizes, up to a
+certain size, which is specified on the command line via \texttt{\dash budget
+  <int>}. The command \cmd{make auto} exploits this to perform random tests up
+to size~100.
+
+The command \cmd{make human} applies the compiler to each of the Surface
+programs stored in the directory \repofile{test/inputs/}. This directory
+currently contains only a few Surface programs. You are encouraged to write
+more. Writing several very small Surface programs that exercise various
+features, one at a time, should help you debug your compiler.
+
+The command \cmd{make test} combines \cmd{make human} and \cmd{make auto}.
+
+\textbf{Task~1 is to complete the file \ml{ForwardMode} so that \cmd{make
+    test} succeeds, with \texttt{\dash forward-mode} and \texttt{\dash
+    test-forward} enabled.}
+
+\textbf{Task~2 is to additionally complete the files \ml{Unzip} and
+  \ml{Transpose} so that \cmd{make test} succeeds, with \texttt{\dash
+    reverse-mode} and \texttt{\dash test-forward} and \texttt{\dash
+    test-reverse} enabled.}
+
+% ------------------------------------------------------------------------------
+
+\section{Required software}
+
+To use the sources that we provide, you need OCaml 4.14 and Menhir.
+You also need the library \texttt{pprint}.
+Assuming that you have installed OCaml via \texttt{opam},
+these components can be installed by typing
+\cmd{opam update \&\& opam install menhir pprint}.
+
+% ------------------------------------------------------------------------------
+
+\section{Evaluation}
+
+Assignments will be evaluated by a combination of:
+\begin{itemize}
+\item \textbf{Testing}. Your compiler will be tested with the input programs
+  that we provide (make sure that \cmd{make test} succeeds!) and with
+  additional input programs.
+\item \textbf{Reading}. We will browse through your source code and evaluate
+  its correctness and elegance.
+\end{itemize}
+
+The \textbf{correctness} of your code matters;
+its performance does not.
+It is acceptable to favor clarity over efficiency:
+for instance,
+it is permitted to call the functions \texttt{flv} or \texttt{fuv}
+(which compute the free variables of a term)
+without worrying about the cost of these calls,
+even if (as a result of these calls)
+the complexity of a program transformation becomes
+quadratic instead of linear.
+
+% ------------------------------------------------------------------------------
+
+\section{Extra credit}
+
+For extra credit, or just for fun, you may wish to go beyond what is strictly
+requested. What to do is up to you. Here are some suggestions of things to do.
+Beware: we do not know exactly how difficult or time-consuming these
+extensions are.
+%
+\begin{itemize}
+\item Extend Surface and Linear with more primitive arithmetic operations.
+\item Implement a measure of the runtime cost of an expression,
+      and check (experimentally) that each transformation preserves the cost
+      (perhaps up to certain constant factor),
+      as claimed in Radul \etal.'s paper.
+\item Test each of the three main transformations
+      (\fmad; \unzipping; \transposition) in isolation.
+      This requires a generator of Linear programs.
+\item At the level of the Surface language,
+      perform algebraic simplifications by identifying
+      and simplifying expressions such as \oc|0 + e|,
+      \oc|0 * e|, \oc|1 * e|, and so on.
+\item At the level of the Surface language,
+      implement a form of common subexpression elimination (CSE).
+\end{itemize}
+
+% ------------------------------------------------------------------------------
+
+\section{What to send}
+
+When you are done, please \href{mailto:francois.pottier@inria.fr}{send to
+  François Pottier} a \file{.tar.gz} archive containing your completed
+programming project. The archive should contain a single
+directory \texttt{mpri-2.4-projet-2022-2023}.
+
+Please include a file \textbf{README.md} to describe what you have achieved
+(task~1; task~2; extra tasks). You are welcome to provide explanations (in
+French or in English) about your solution or about the difficulties that you
+have encountered.
+
+% ------------------------------------------------------------------------------
+
+\section{Deadline}
+
+Please send your project on or before
+\textbf{Monday, February 13, 2023}.
+% à peu près 3 semaines avant l'examen final prévu le 8 mars
+
+% ------------------------------------------------------------------------------
+
+\bibliography{local}
+
+\end{document}
