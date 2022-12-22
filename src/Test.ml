@@ -115,6 +115,20 @@ let jacobian m n (f : vector -> vector) (x : vector) : matrix =
 
 (* -------------------------------------------------------------------------- *)
 
+(* Determining whether two linear values are close. *)
+
+open SurfaceInterpreter
+
+let rec close_values (observed : value) (expected : value) =
+  match observed, expected with
+ | VReal x1, VReal x2 ->
+     close x1 x2
+ | VTuple vs1, VTuple vs2 ->
+     assert (List.compare_lengths vs1 vs2 = 0);
+     List.for_all2 close_values vs1 vs2
+ | (VReal _ | VTuple _), _ ->
+     assert false
+
 (* Determining whether two vectors of real numbers are close. *)
 
 let close (observed : vector) (expected : vector) =
@@ -124,6 +138,8 @@ let close (observed : vector) (expected : vector) =
 (* -------------------------------------------------------------------------- *)
 
 (* Choices. *)
+
+open Surface
 
 (* These functions are used to pick vectors [x] and perturbations [dx]. *)
 
@@ -149,6 +165,24 @@ let rec pick_list n (k : real list -> 'a) : 'a =
 let pick_vector n (k : vector -> 'a) : 'a =
   pick_list n (fun xs -> k (Array.of_list xs))
 
+let rec pick_value ty (k : value -> 'a) : 'a =
+  match ty with
+  | TUnknown ->
+      invalid_arg "pick_value: missing type information"
+  | TReal ->
+      pick_real (fun x -> k (VReal x))
+  | TTuple tys ->
+      pick_values tys (fun vs -> k (VTuple vs))
+
+and pick_values tys k =
+  match tys with
+  | [] ->
+      k []
+  | ty :: tys ->
+      pick_value ty @@ fun v ->
+      pick_values tys @@ fun vs ->
+      k (v :: vs)
+
 (* -------------------------------------------------------------------------- *)
 
 (* Printing. *)
@@ -164,14 +198,8 @@ let show_wildcard _x =
 
 (* A comma-separated list. *)
 
-let rec show_list show xs =
-  match xs with
-  | [] ->
-      ""
-  | [x] ->
-      show x
-  | x :: xs ->
-      show x ^ ", " ^ show_list show xs
+let show_list show xs =
+  String.concat ", " (List.map show xs)
 
 let parens s =
   "(" ^ s ^ ")"
@@ -203,6 +231,18 @@ let show_tprogs (prog, _) (prog', _) =
   "Transformed program:\n\n" ^
   PPrintExtra.to_string (print_program prog')
 
+let show_linprogs prog prog' =
+  "Original program:\n\n" ^
+  PPrintExtra.to_string (LinearPrinter.print_program prog) ^
+  "Transformed program:\n\n" ^
+  PPrintExtra.to_string (LinearPrinter.print_program prog')
+
+let show_value =
+  SurfaceInterpreter.print_value
+
+let show_values vs =
+  show_list show_value vs
+
 (* -------------------------------------------------------------------------- *)
 
 (* We test at the Surface level, using the Surface interpreter. *)
@@ -212,10 +252,8 @@ let show_tprogs (prog, _) (prog', _) =
    because the translation from Linear back to Surface introduces
    a tuple when a function has more than one result. *)
 
-(* Our tests bear directly on functions of type R^n → R^m only. *)
+(* Our differentiation tests only check functions of type R^n → R^m. *)
 
-open Surface
-open SurfaceInterpreter
 open SurfaceTypeChecker
 
 (* Let reals m stand for:
@@ -345,6 +383,23 @@ let unpair (v : value) : value * value =
   | _ ->
       assert false
 
+(* [well_typed_value ty v] determines whether the value [v]
+   admits the type [ty]. *)
+
+let rec well_typed_value ty v =
+  match ty, v with
+  | TUnknown, _ ->
+      invalid_arg "is_well_typed"
+  | TReal, VReal _ ->
+      true
+  | TTuple tys, VTuple vs ->
+      well_typed_values tys vs
+  | (TReal | TTuple _), (VReal _ | VTuple _) ->
+      false
+
+and well_typed_values tys vs =
+  List.for_all2 well_typed_value tys vs
+
 (* -------------------------------------------------------------------------- *)
 
 (* Evaluating Surface expressions. *)
@@ -372,6 +427,24 @@ let interpret_f (tprog : tprog) m n (f : name) (x : vector) : vector =
   (* Evaluate it. *)
   project_reals m (eval prog empty e)
 
+(* [interpret_l tprog f] interprets the linear function [f] as
+   a mathematical function from (unrestricted and linear) input values
+   to output values. *)
+
+include struct
+  open Linear
+  open LinearInterpreter
+
+  let interpret_l prog (f : name) (uvs : values) (lvs : values) : LinearInterpreter.result =
+    let ubs = List.mapi (fun i _ -> U (string_of_int i), ()) uvs in
+    let lbs = List.mapi (fun i _ -> L (string_of_int i), ()) lvs in
+    let env =
+      bind_many (Env.empty, Env.empty) (ubs, lbs) (uvs, lvs) in
+    (* Construct a function call. *)
+    let e : expr = FunCall (f, List.map fst ubs, List.map fst lbs) in
+    (* Evaluate it. *)
+    eval prog env e
+end
 (* [interpret_df tprog m n df] interprets the function [df] as a mathematical
    function of a pair of vectors in R^n to a pair of vectors in R^m. *)
 
@@ -420,6 +493,16 @@ let fail mode tprog tprog' format =
     let msg =
       sprintf "A problem was detected while testing %s-mode AD.\n\n" mode ^
       show_tprogs tprog tprog' ^
+      msg
+    in
+    raise (TestFailure msg)
+  ) format
+
+let fail_lin test_descr prog prog' format =
+  ksprintf (fun msg ->
+    let msg =
+      sprintf "A problem was detected while testing %s.\n\n" test_descr ^
+      show_linprogs prog prog' ^
       msg
     in
     raise (TestFailure msg)
@@ -507,6 +590,66 @@ let test_forward_mode tprog tprog' m n f df =
 
 (* -------------------------------------------------------------------------- *)
 
+(* Testing the unzipping transform on one function [f]. *)
+
+(* For each linear function f of type (tyus; tyls) → (tyu's; tyl's)
+   unzipping produces a function
+     cf : (tyus; tyl's) → (; tyl's)
+
+   We check that this function gives the same results
+   as the linear output of the original function f. *)
+
+let test_unzip prog prog' f f_ty uf cf =
+  let fail format = fail_lin "unzip" prog prog' format in
+  on_failure (fail "%s") @@ fun () ->
+
+  let ((utys, ltys), (out_utys, out_ltys)) = f_ty in
+
+  (* Pick input values (uxs; lxs) *)
+  pick_values utys @@ robustly @@ fun uxs ->
+  pick_values ltys @@ robustly @@ fun lxs ->
+
+  (* Evaluate (uys; lys) = f(uxs; lxs). *)
+  let (uys, lys) = interpret_l prog f uxs lxs in
+  if not (well_typed_values out_utys uys
+          && well_typed_values out_ltys lys)
+  then fail "test_unzip (%s): type error" f;
+
+  (* Note: we could also call [uf] to get the unrestricted outputs of
+     the unzipping of [f], and compare that to the [uys]. But [uf]
+     does not only contain unrestricted outputs, it also has a trace
+     of intermediate computations worth reusing.
+
+     There is no easy way to separate the trace from the output
+     values -- how to do this may depend on calling conventions chosen
+     differently by each student. So we gave up on checking the
+     unrestricted outputs for now.
+
+     The easier approach to restore testing would be to extend the
+     specification of Unzip to require producing a variant of [uf]
+     that does not include the trace information. *)
+  ignore uf;
+
+  (* Evaluate lys' = cf(uxs; lxs) *)
+  let (li, lys') = interpret_l prog' cf uxs lxs in
+  if li <> [] then
+    fail "The function %s should not return unrestricted outputs" cf;
+
+  if not (well_typed_values out_ltys lys')
+  then fail "test_unzip (%s): type error" f;
+
+  (* (uys; lys) should be (uys'; lys') *)
+  if not (List.for_all2 close_values lys lys')
+  then
+    fail "The function %s is not preserved by unzipping.\n\
+          %s(%s; %s) = (%s; %s)\n\
+          %s(%s; %s) = (; %s)\n"
+      f
+      f (show_values uxs) (show_values lxs) (show_values uys) (show_values lys)
+      cf (show_values uxs) (show_values lxs) (show_values lys')
+
+(* -------------------------------------------------------------------------- *)
+
 (* Testing reverse-mode AD on one function [f]. *)
 
 (* Suppose f is a function of type R^n → R^m, and suppose tcdf is its
@@ -560,7 +703,7 @@ let test_reverse_mode tprog tprog' m n f tcdf =
 
 (* -------------------------------------------------------------------------- *)
 
-(* Testing forward-mode AD on a program [prog], translated to [prog']. *)
+(* Performing tests on a program [prog], translated to [prog']. *)
 
 let verbose =
   false
@@ -577,6 +720,34 @@ let test_forward_mode prog prog' =
   let df = NamingConventions.derivative f in
   if verbose then printf "Testing %s (forward) (m = %d, n = %d)...\n%!" f m n;
   test_forward_mode (prog, fenv) (prog', fenv') m n f df
+
+let test_unzip names prog prog' =
+  (* Type-check the programs. *)
+  let prog = LinearTypeChecker.check `Lenient prog in
+  let fenv = LinearTypeChecker.environment prog in
+  let prog' = LinearTypeChecker.check `Lenient prog' in
+  (* For each function [f] in the source program, *)
+  prog
+  |> List.iter @@ function Linear.Decl (_range, f, _ubs, _lbs, _def) ->
+  if not (List.mem f names)
+  then () else begin
+    let uf = NamingConventions.unrestricted f in
+    let cf = NamingConventions.combined f in
+    let f_ty = Env.lookup fenv f in
+    let only_reals =
+      let only_reals tys = List.for_all ((=) TReal) tys in
+      let ((a, b), (c, d)) = f_ty in
+      List.for_all only_reals [a; b; c; d]
+    in
+    (* only test functions with type [R^n -> R^m].
+       We don't need this assumption -- our tests work fine on richer types
+       but filtering help keep the testing time manageable. *)
+    if not only_reals then ()
+    else begin
+      if verbose then printf "Testing %s (unzip)...\n%!" f;
+      test_unzip prog prog' f f_ty uf cf
+    end
+  end
 
 let test_reverse_mode prog prog' =
   (* Type-check the programs. *)

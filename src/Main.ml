@@ -39,8 +39,8 @@ let show_surface =
 let show_linear =
   ref false
 
-let test_forward, test_reverse =
-  ref false, ref false
+let test_forward, test_unzip, test_reverse =
+  ref false, ref false, ref false
 
 let verbose =
   ref false
@@ -79,6 +79,7 @@ let () =
     "--show-surface", Arg.Set show_surface, " show the Surface program";
     "--show-linear",  Arg.Set show_linear,  " show the Linear program";
     "--test-forward", Arg.Set test_forward, " test forward mode on the fly";
+    "--test-unzip", Arg.Set test_unzip, " test unzipping on the fly";
     "--test-reverse", Arg.Set test_reverse, " test reverse mode on the fly";
     "--highlight-style", Arg.String set_highlight_style,
       "<style> choose error highlight style among " ^ highlight_styles_descr;
@@ -113,8 +114,8 @@ let show_surface =
 let show_linear =
   !show_linear
 
-let test_forward, test_reverse =
-  !test_forward, !test_reverse
+let test_forward, test_unzip, test_reverse =
+  !test_forward, !test_unzip, !test_reverse
 
 let verbose =
   !verbose
@@ -304,6 +305,14 @@ module L = struct
     end;
     prog'
 
+  let test_unzip fs prog prog' =
+    if test_unzip then begin try
+      Test.test_unzip fs prog prog'
+    with Test.TestFailure msg ->
+      maybe_exit msg
+    end;
+    prog'
+
 end
 
 (* -------------------------------------------------------------------------- *)
@@ -364,6 +373,9 @@ let half2 (sprog : Surface.prog) (prog : Linear.prog) : Surface.prog =
 
   (* Normalize, simplify again. *)
   |> L.simplify (Some "UNZIPPED_LINEAR")
+
+  (* Test whether the unzipped program satisfies its specification. *)
+  |> L.test_unzip dfs prog
 
   (* Transpose all [ldf] and [cdf] functions. *)
   |> Transpose.transform (ldfs @ cdfs)

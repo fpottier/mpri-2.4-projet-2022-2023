@@ -19,7 +19,7 @@ open Linear
    [f], [df] returns an unrestricted result [y] and a linear result
    [dy].
 
-   In the transformed program, use a linear variable may be used an
+   In the transformed program, a linear variable may be used an
    arbitrary number of times (that is, zero, one, or more times).
    This can be later fixed by using [DupDropInsertion]. *)
 val transform: prog -> prog

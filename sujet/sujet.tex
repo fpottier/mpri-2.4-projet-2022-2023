@@ -221,6 +221,18 @@ and then type \cmd{make test}.
 These commands test the \emph{combination} of forward-mode AD,
 unzipping, and transposition, so they cannot be used until
 all three passes have been implemented.
+
+To test unzipping in isolation,
+before transposition is working,
+the following command can be used:
+\begin{verbatim}
+  dune exec src/Main.exe -- --reverse-mode --test-unzip
+\end{verbatim}
+(For this command to succeed, transposition must not fail.
+You may need to define \texttt{Transpose.transform} as the
+identity function so as to avoid hitting the exception
+\texttt{NOT YET IMPLEMENTED}.)
+
 More details about testing are given in \S\ref{sec:testing}.
 
 % [Gabriel] Je n'ai pas trouvé comment tester cette fonction
@@ -447,6 +459,8 @@ compiler. In particular,
       program that is obtained as a result of reverse-mode AD. The program is
       tested by checking that the equations given at the end
       of~\S\ref{sec:example:rmad} appear to hold.
+\item \texttt{\dash test-unzip} causes the compiler to test the Linear
+      program that is obtained as a result of unzipping.
 \end{itemize}
 
 When invoked without a file name, the compiler automatically applies itself to
